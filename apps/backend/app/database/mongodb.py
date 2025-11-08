@@ -14,6 +14,7 @@ class MongoDB:
     database = None
     _connection_lock: Optional[asyncio.Lock] = None
     _lock_loop_id: Optional[int] = None
+    _client_loop_id: Optional[int] = None
 
     @classmethod
     async def _get_connection_lock(cls) -> asyncio.Lock:
@@ -48,8 +49,25 @@ class MongoDB:
         if not mongodb_url:
             raise ValueError("MONGODB_URL environment variable is not set")
         
+        # Get current event loop ID
+        try:
+            current_loop = asyncio.get_running_loop()
+            current_loop_id = id(current_loop)
+        except RuntimeError:
+            current_loop_id = None
+        
+        # Close existing client if it exists and we're in a different event loop
+        if cls.client is not None and cls._client_loop_id != current_loop_id:
+            try:
+                cls.client.close()
+            except Exception as e:
+                logger.warning(f"Error closing old MongoDB client: {e}")
+            cls.client = None
+            cls.database = None
+        
         cls.client = AsyncIOMotorClient(mongodb_url)
         cls.database = cls.client[db_name]
+        cls._client_loop_id = current_loop_id
         
         # Verify connection by pinging the server
         try:
@@ -101,6 +119,7 @@ class MongoDB:
                 cls.database = None
                 cls._connection_lock = None
                 cls._lock_loop_id = None
+                cls._client_loop_id = None
 
     @classmethod
     async def ensure_connected(cls):
@@ -115,16 +134,35 @@ class MongoDB:
             try:
                 # Check if we're in a running event loop (required for async operations)
                 current_loop = asyncio.get_running_loop()
-                # If we got here, we have a valid event loop
-                # The client should be valid if it was created in this or a previous valid loop
-                # Motor handles event loop changes internally, so we can proceed
-                return
+                current_loop_id = id(current_loop)
+                
+                # Check if the event loop is closed
+                if current_loop.is_closed():
+                    logger.warning("Event loop is closed, will reconnect")
+                    cls.client = None
+                    cls.database = None
+                    cls._client_loop_id = None
+                # Check if we're in a different event loop than when the client was created
+                elif cls._client_loop_id is not None and cls._client_loop_id != current_loop_id:
+                    logger.info("Different event loop detected, will reconnect")
+                    # Close old client
+                    try:
+                        cls.client.close()
+                    except Exception as e:
+                        logger.warning(f"Error closing old client: {e}")
+                    cls.client = None
+                    cls.database = None
+                    cls._client_loop_id = None
+                else:
+                    # We're in the same event loop, client should be valid
+                    return
             except RuntimeError:
                 # No running event loop - this shouldn't happen in FastAPI async endpoints
                 # but if it does, we need to reconnect
                 logger.warning("No running event loop detected, will reconnect")
                 cls.client = None
                 cls.database = None
+                cls._client_loop_id = None
         
         # Acquire lock to ensure only one connection attempt at a time
         lock = await cls._get_connection_lock()
@@ -158,8 +196,20 @@ class MongoDB:
             },
         }
         
-        result = await cls.database.sensor_readings.insert_one(document)
-        return str(result.inserted_id)
+        try:
+            result = await cls.database.sensor_readings.insert_one(document)
+            return str(result.inserted_id)
+        except RuntimeError as e:
+            # Catch "Event loop is closed" errors and retry with fresh connection
+            if "Event loop is closed" in str(e) or "loop is closed" in str(e).lower():
+                logger.warning("Event loop closed during operation, reconnecting and retrying...")
+                cls.client = None
+                cls.database = None
+                cls._client_loop_id = None
+                await cls.ensure_connected()
+                result = await cls.database.sensor_readings.insert_one(document)
+                return str(result.inserted_id)
+            raise
 
     @classmethod
     async def get_all_sensor_data(cls) -> List[SensorDataOutput]:
@@ -183,6 +233,25 @@ class MongoDB:
                     raise
             
             return results
+        except RuntimeError as e:
+            # Catch "Event loop is closed" errors and retry with fresh connection
+            if "Event loop is closed" in str(e) or "loop is closed" in str(e).lower():
+                logger.warning("Event loop closed during operation, reconnecting and retrying...")
+                cls.client = None
+                cls.database = None
+                cls._client_loop_id = None
+                await cls.ensure_connected()
+                cursor = cls.database.sensor_readings.find().sort("timestamp", -1)
+                documents = await cursor.to_list(length=None)
+                
+                results = []
+                for doc in documents:
+                    if "_id" in doc:
+                        doc["_id"] = str(doc["_id"])
+                    results.append(SensorDataOutput(**doc))
+                
+                return results
+            raise
         except Exception as e:
             logger.error(f"Error in get_all_sensor_data: {str(e)}", exc_info=True)
             raise
@@ -192,8 +261,20 @@ class MongoDB:
         """Clear all sensor data (for testing)"""
         await cls.ensure_connected()
         
-        result = await cls.database.sensor_readings.delete_many({})
-        return result.deleted_count
+        try:
+            result = await cls.database.sensor_readings.delete_many({})
+            return result.deleted_count
+        except RuntimeError as e:
+            # Catch "Event loop is closed" errors and retry with fresh connection
+            if "Event loop is closed" in str(e) or "loop is closed" in str(e).lower():
+                logger.warning("Event loop closed during operation, reconnecting and retrying...")
+                cls.client = None
+                cls.database = None
+                cls._client_loop_id = None
+                await cls.ensure_connected()
+                result = await cls.database.sensor_readings.delete_many({})
+                return result.deleted_count
+            raise
 
     @classmethod
     async def get_database_info(cls) -> dict:
@@ -212,11 +293,39 @@ class MongoDB:
                 "exists": collection_count > 0 or stats.get("size", 0) > 0,
                 "indexes": await cls.database.sensor_readings.list_indexes().to_list(length=None)
             }
+        except RuntimeError as e:
+            # Catch "Event loop is closed" errors and retry with fresh connection
+            if "Event loop is closed" in str(e) or "loop is closed" in str(e).lower():
+                logger.warning("Event loop closed during operation, reconnecting and retrying...")
+                cls.client = None
+                cls.database = None
+                cls._client_loop_id = None
+                await cls.ensure_connected()
+                try:
+                    stats = await cls.database.command("collStats", "sensor_readings")
+                    collection_count = await cls.database.sensor_readings.count_documents({})
+                    return {
+                        "database_name": cls.database.name,
+                        "collection_name": "sensor_readings",
+                        "document_count": collection_count,
+                        "exists": collection_count > 0 or stats.get("size", 0) > 0,
+                        "indexes": await cls.database.sensor_readings.list_indexes().to_list(length=None)
+                    }
+                except Exception as retry_e:
+                    logger.warning(f"Could not get database info after retry: {str(retry_e)}")
+                    return {
+                        "database_name": cls.database.name if cls.database else "unknown",
+                        "collection_name": "sensor_readings",
+                        "document_count": 0,
+                        "exists": False,
+                        "indexes": []
+                    }
+            raise
         except Exception as e:
             # Collection might not exist yet
             logger.warning(f"Could not get database info (collection may not exist yet): {str(e)}")
             return {
-                "database_name": cls.database.name,
+                "database_name": cls.database.name if cls.database else "unknown",
                 "collection_name": "sensor_readings",
                 "document_count": 0,
                 "exists": False,

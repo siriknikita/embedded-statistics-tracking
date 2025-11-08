@@ -149,8 +149,21 @@ async def seed_test_data(
             }
             
             await MongoDB.ensure_connected()
-            await MongoDB.database.sensor_readings.insert_one(document)
-            inserted_count += 1
+            try:
+                await MongoDB.database.sensor_readings.insert_one(document)
+                inserted_count += 1
+            except RuntimeError as e:
+                # Catch "Event loop is closed" errors and retry with fresh connection
+                if "Event loop is closed" in str(e) or "loop is closed" in str(e).lower():
+                    # Reset connection and retry
+                    MongoDB.client = None
+                    MongoDB.database = None
+                    MongoDB._client_loop_id = None
+                    await MongoDB.ensure_connected()
+                    await MongoDB.database.sensor_readings.insert_one(document)
+                    inserted_count += 1
+                else:
+                    raise
         
         return {
             "status": "success",
