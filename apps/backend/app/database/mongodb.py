@@ -12,7 +12,32 @@ logger = logging.getLogger(__name__)
 class MongoDB:
     client: Optional[AsyncIOMotorClient] = None
     database = None
-    _connection_lock = asyncio.Lock()
+    _connection_lock: Optional[asyncio.Lock] = None
+    _lock_loop_id: Optional[int] = None
+
+    @classmethod
+    def _get_connection_lock(cls) -> asyncio.Lock:
+        """Get or create the connection lock, ensuring it's created in the current event loop.
+        
+        This method handles cases where the event loop might have been closed and recreated
+        (common in serverless environments), by tracking the loop ID and recreating the lock
+        if we're in a different event loop.
+        """
+        try:
+            current_loop = asyncio.get_running_loop()
+            current_loop_id = id(current_loop)
+            
+            # If we don't have a lock, or we're in a different event loop, create a new one
+            if cls._connection_lock is None or cls._lock_loop_id != current_loop_id:
+                cls._connection_lock = asyncio.Lock()
+                cls._lock_loop_id = current_loop_id
+        except RuntimeError:
+            # No running loop (shouldn't happen in FastAPI async endpoints)
+            # Create the lock anyway - it will be bound to the loop when one is created
+            cls._connection_lock = asyncio.Lock()
+            cls._lock_loop_id = None
+        
+        return cls._connection_lock
 
     @classmethod
     async def connect(cls):
@@ -82,7 +107,7 @@ class MongoDB:
             return
         
         # Acquire lock to ensure only one connection attempt at a time
-        async with cls._connection_lock:
+        async with cls._get_connection_lock():
             # Double-check after acquiring lock (another task might have connected)
             if cls.database is None:
                 logger.info("Database not connected. Connecting now...")
