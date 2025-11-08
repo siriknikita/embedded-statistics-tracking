@@ -16,7 +16,7 @@ class MongoDB:
     _lock_loop_id: Optional[int] = None
 
     @classmethod
-    def _get_connection_lock(cls) -> asyncio.Lock:
+    async def _get_connection_lock(cls) -> asyncio.Lock:
         """Get or create the connection lock, ensuring it's created in the current event loop.
         
         This method handles cases where the event loop might have been closed and recreated
@@ -31,11 +31,11 @@ class MongoDB:
             if cls._connection_lock is None or cls._lock_loop_id != current_loop_id:
                 cls._connection_lock = asyncio.Lock()
                 cls._lock_loop_id = current_loop_id
-        except RuntimeError:
-            # No running loop (shouldn't happen in FastAPI async endpoints)
-            # Create the lock anyway - it will be bound to the loop when one is created
-            cls._connection_lock = asyncio.Lock()
-            cls._lock_loop_id = None
+        except RuntimeError as e:
+            # No running loop - this should not happen in FastAPI async endpoints
+            # If it does, we can't create a lock, so we'll raise an error
+            logger.error(f"Cannot create connection lock: no running event loop. Error: {e}")
+            raise RuntimeError("Cannot create connection lock: no running event loop") from e
         
         return cls._connection_lock
 
@@ -91,8 +91,16 @@ class MongoDB:
     async def disconnect(cls):
         """Disconnect from MongoDB"""
         if cls.client:
-            cls.client.close()
-            print("Disconnected from MongoDB")
+            try:
+                cls.client.close()
+                logger.info("Disconnected from MongoDB")
+            except Exception as e:
+                logger.warning(f"Error closing MongoDB client: {e}")
+            finally:
+                cls.client = None
+                cls.database = None
+                cls._connection_lock = None
+                cls._lock_loop_id = None
 
     @classmethod
     async def ensure_connected(cls):
@@ -102,14 +110,27 @@ class MongoDB:
         
         Uses asyncio.Lock() to prevent race conditions when multiple concurrent
         tasks try to connect simultaneously."""
-        # Fast path: if already connected, return immediately
-        if cls.database is not None:
-            return
+        # Fast path: if already connected, check if we're still in a valid event loop
+        if cls.database is not None and cls.client is not None:
+            try:
+                # Check if we're in a running event loop (required for async operations)
+                current_loop = asyncio.get_running_loop()
+                # If we got here, we have a valid event loop
+                # The client should be valid if it was created in this or a previous valid loop
+                # Motor handles event loop changes internally, so we can proceed
+                return
+            except RuntimeError:
+                # No running event loop - this shouldn't happen in FastAPI async endpoints
+                # but if it does, we need to reconnect
+                logger.warning("No running event loop detected, will reconnect")
+                cls.client = None
+                cls.database = None
         
         # Acquire lock to ensure only one connection attempt at a time
-        async with cls._get_connection_lock():
+        lock = await cls._get_connection_lock()
+        async with lock:
             # Double-check after acquiring lock (another task might have connected)
-            if cls.database is None:
+            if cls.database is None or cls.client is None:
                 logger.info("Database not connected. Connecting now...")
                 await cls.connect()
 

@@ -148,6 +148,7 @@ async def seed_test_data(
                 },
             }
             
+            await MongoDB.ensure_connected()
             await MongoDB.database.sensor_readings.insert_one(document)
             inserted_count += 1
         
