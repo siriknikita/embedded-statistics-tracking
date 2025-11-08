@@ -1,0 +1,18 @@
+{
+  "name": "embedded-statistics-tracking",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "dev:backend": "cd apps/backend && uv run uvicorn app.main:app --reload",
+    "build:frontend": "pnpm --filter frontend build",
+    "build:backend": "cd apps/backend && uv build"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
+
