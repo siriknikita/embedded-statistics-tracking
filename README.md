@@ -9,6 +9,8 @@ embedded-statistics-tracking/
 ├── apps/
 │   ├── frontend/          # Next.js 14+ application
 │   └── backend/           # FastAPI application
+├── docs/
+│   └── diagrams/          # System architecture and flow diagrams
 ├── package.json           # Root workspace configuration
 └── pnpm-workspace.yaml    # Workspace configuration
 ```
@@ -20,6 +22,34 @@ embedded-statistics-tracking/
 - **RESTful API**: FastAPI backend with MongoDB storage
 - **Test Data Generation**: Endpoint to seed test data matching exact sensor format
 - **Modern UI**: Built with Next.js, Tailwind CSS, and shadcn/ui
+
+## System Architecture
+
+This section provides comprehensive visual documentation of the system architecture, communication flows, data processing, and API endpoints.
+
+### Architecture Overview
+
+The system consists of three main components: an Embedded System (Raspberry Pi Pico W), a Backend API (FastAPI), and a Frontend (Next.js). The embedded system collects sensor data and transmits it to the backend, which stores it in MongoDB. The frontend retrieves and visualizes this data for users.
+
+![System Architecture](docs/diagrams/architecture-diagram.png)
+
+### Communication Flow
+
+The following sequence diagram illustrates the end-to-end communication between all system components, including initialization, sensor reading, data transmission, and frontend polling mechanisms.
+
+![Communication Diagram](docs/diagrams/communication-daigram.png)
+
+### Data Flow
+
+This diagram shows the step-by-step data transformation from raw sensor readings to displayed visualizations, highlighting key technologies and data formats at each stage.
+
+![Data Flow Diagram](docs/diagrams/data-flow-diagram.png)
+
+### API Endpoints Summary
+
+A concise overview of all API endpoints, their purposes, and how they interact with the MongoDB database.
+
+![Endpoints Summary](docs/diagrams/edpoints-summary.png)
 
 ## Prerequisites
 
