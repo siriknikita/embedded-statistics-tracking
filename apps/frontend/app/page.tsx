@@ -5,8 +5,7 @@ import { useSensorData } from "@/hooks/use-sensor-data";
 import { SensorCards } from "@/components/dashboard/SensorCards";
 import { SensorCharts } from "@/components/dashboard/SensorCharts";
 import { Button } from "@/components/ui/button";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://your-backend.vercel.app";
+import { normalizeApiUrl, getApiUrl } from "@/lib/utils";
 
 export default function Home() {
   const { data, loading, error, refetch } = useSensorData();
@@ -15,8 +14,12 @@ export default function Home() {
   const handleGenerateRandomData = async () => {
     setGenerating(true);
     try {
-      const response = await fetch(`${API_URL}/api/generate_random_data`, {
+      const apiUrl = normalizeApiUrl(getApiUrl(), "/api/generate_random_data");
+      const response = await fetch(apiUrl, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
       
       if (!response.ok) {

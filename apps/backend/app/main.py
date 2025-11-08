@@ -34,13 +34,17 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# CORS middleware - configured for Vercel serverless functions
+# Allow all origins for now (in production, specify actual frontend URL)
+# Note: allow_credentials must be False when using allow_origins=["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, specify actual frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_credentials=False,  # Must be False when using wildcard origins
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
 # Include routers

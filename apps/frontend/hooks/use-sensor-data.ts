@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { SensorData } from "@/types/sensor";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://your-backend.vercel.app";
+import { normalizeApiUrl, getApiUrl } from "@/lib/utils";
 
 export function useSensorData() {
   const [data, setData] = useState<SensorData[]>([]);
@@ -14,7 +13,13 @@ export function useSensorData() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_URL}/api/sensors_data`);
+      const apiUrl = normalizeApiUrl(getApiUrl(), "/api/sensors_data");
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
       
       if (!response.ok) {
         throw new Error(`Failed to fetch sensor data: ${response.statusText}`);
