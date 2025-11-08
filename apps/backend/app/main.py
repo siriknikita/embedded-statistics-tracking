@@ -1,10 +1,17 @@
 import os
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.database.mongodb import MongoDB
 from app.routes import sensors, test_data
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # Load environment variables
 load_dotenv()
@@ -49,6 +56,8 @@ async def root():
         "endpoints": {
             "POST /api/send_data": "Receive sensor data from embedded system",
             "GET /api/sensors_data": "Get all sensor data",
+            "GET /api/database_info": "Get database and collection information",
+            "POST /api/generate_random_data": "Generate a single random sensor reading",
             "POST /api/seed_test_data": "Generate test data (for development)"
         }
     }

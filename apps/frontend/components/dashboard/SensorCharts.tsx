@@ -202,7 +202,7 @@ export function SensorCharts({ data }: SensorChartsProps) {
               <Line
                 type="monotone"
                 dataKey="gyroX"
-                stroke="#ff00ff"
+                stroke="#ef4444"
                 strokeWidth={2}
                 name="X (rad/s)"
                 dot={false}
@@ -210,7 +210,7 @@ export function SensorCharts({ data }: SensorChartsProps) {
               <Line
                 type="monotone"
                 dataKey="gyroY"
-                stroke="#00ffff"
+                stroke="#22c55e"
                 strokeWidth={2}
                 name="Y (rad/s)"
                 dot={false}
@@ -218,7 +218,7 @@ export function SensorCharts({ data }: SensorChartsProps) {
               <Line
                 type="monotone"
                 dataKey="gyroZ"
-                stroke="#ffff00"
+                stroke="#3b82f6"
                 strokeWidth={2}
                 name="Z (rad/s)"
                 dot={false}

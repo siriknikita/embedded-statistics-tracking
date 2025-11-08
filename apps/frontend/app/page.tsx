@@ -1,11 +1,37 @@
 "use client";
 
+import { useState } from "react";
 import { useSensorData } from "@/hooks/use-sensor-data";
 import { SensorCards } from "@/components/dashboard/SensorCards";
 import { SensorCharts } from "@/components/dashboard/SensorCharts";
+import { Button } from "@/components/ui/button";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://your-backend.vercel.app";
 
 export default function Home() {
-  const { data, loading, error } = useSensorData();
+  const { data, loading, error, refetch } = useSensorData();
+  const [generating, setGenerating] = useState(false);
+
+  const handleGenerateRandomData = async () => {
+    setGenerating(true);
+    try {
+      const response = await fetch(`${API_URL}/api/generate_random_data`, {
+        method: "POST",
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to generate random data: ${response.statusText}`);
+      }
+      
+      // Refresh the sensor data after generating
+      await refetch();
+    } catch (err) {
+      console.error("Error generating random data:", err);
+      alert(err instanceof Error ? err.message : "Failed to generate random data");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const latestData = data.length > 0 ? data[0] : null;
 
@@ -22,6 +48,14 @@ export default function Home() {
           <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
             Real-time monitoring of sensor data from embedded FreeRTOS system
           </p>
+          <Button 
+            onClick={handleGenerateRandomData} 
+            disabled={generating || loading}
+            size="lg"
+            className="mt-4"
+          >
+            {generating ? "Generating..." : "Generate Random Sensor Data"}
+          </Button>
         </div>
 
         {/* Error State */}

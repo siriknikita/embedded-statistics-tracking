@@ -49,6 +49,48 @@ def generate_test_sensor_data(base_time: datetime, variation: float = 0.1) -> Se
     )
 
 
+@router.post("/generate_random_data")
+async def generate_random_data() -> Dict:
+    """
+    Generate a single random sensor reading and store it in the database.
+    Useful for testing and demonstration purposes.
+    
+    Returns:
+        Dictionary with status and the inserted record ID
+    """
+    try:
+        # Generate a single random sensor reading with current timestamp
+        test_data = generate_test_sensor_data(datetime.utcnow())
+        
+        # Insert into database using the standard insert method
+        record_id = await MongoDB.insert_sensor_data(test_data)
+        
+        return {
+            "status": "success",
+            "message": "Random sensor data generated and stored successfully",
+            "id": record_id,
+            "data": {
+                "temperature": test_data.temperature,
+                "humidity": test_data.humidity,
+                "voc": test_data.voc,
+                "light": test_data.light,
+                "sound": test_data.sound,
+                "accelerometer": {
+                    "x": test_data.accelerometer.x,
+                    "y": test_data.accelerometer.y,
+                    "z": test_data.accelerometer.z,
+                },
+                "gyroscope": {
+                    "x": test_data.gyroscope.x,
+                    "y": test_data.gyroscope.y,
+                    "z": test_data.gyroscope.z,
+                },
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate random data: {str(e)}")
+
+
 @router.post("/seed_test_data")
 async def seed_test_data(
     hours: int = Query(24, ge=1, le=168, description="Number of hours of historical data"),
